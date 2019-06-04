@@ -2,6 +2,8 @@ import pytest
 import re
 
 from tinydb import where
+from tinydb import TinyDB
+from tinydb import errors
 
 
 def test_tables_list(db):
@@ -121,6 +123,7 @@ def test_table_repr(db):
 
 def test_bulk(db):
     table = db.table('table5', cache_size=0)
+    table6 = db.table('table6', cache_size=0)
     query = where('int') == 1
 
     bulk = table.bulk()
@@ -137,7 +140,20 @@ def test_bulk(db):
     assert bulk.count(where('int') == 2) == 0
     assert len(bulk._query_cache) == 0
 
+    bulk6 = table6.bulk()
+    bulk6.insert({'int': 5})
+    bulk6.flush()
+
+    try:
+        bulk6.flush()
+    except errors.FLuashError as ex:
+        assert str(ex) == 'Object is flushed'
+
     bulk.flush()
+    bulk = table.bulk()
+
+    # test two bulk rollback data 
+    assert table6.count(where('int') == 5) == 1
 
     # test reset is True
     assert bulk.count(query) == 2
@@ -155,7 +171,44 @@ def test_bulk(db):
     assert table.count(where('int') == 2) == 0
     assert bulk.count(where('int') == 2) == 2
 
-    bulk.reset()
+    bulk = table.bulk()
 
     assert table.count(where('int') == 2) == 0
     assert bulk.count(where('int') == 2) == 0
+
+    bulk5 = table.bulk()
+    assert bulk5.count(where('int') == 1) == 2
+    assert table.count(where('int') == 1) == 2
+
+    bulk5.remove(where('int') == 1)
+    assert bulk5.count(where('int') == 1) == 0
+    bulk5.flush()
+
+    assert bulk5.count(where('int') == 1) == 0
+    assert table.count(where('int') == 1) == 0
+    assert bulk.count(where('int') == 1) == 2
+
+    # test bulk too old
+    try:
+        bulk.flush()
+    except errors.FLuashError as ex:
+        assert str(ex) == 'memory_hash is change'
+    
+    bulk = table.bulk()
+    assert table.count(where('int') == 3) == 0
+    assert bulk.count(where('int') == 3) == 0
+
+    bulk.insert({'int': 3})
+    bulk.insert({'int': 3})
+    bulk.flush()
+
+    # test two bulk rollback data
+    assert table.count(where('int') == 3) == 2
+    assert bulk.count(where('int') == 3) == 2
+
+
+def test_bulk_json_write(tmpdir):
+    path = str(tmpdir.join('test_bulk.db'))
+
+    with TinyDB(path) as db:
+        test_bulk(db)

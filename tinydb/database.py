@@ -7,11 +7,17 @@ try:
     from collections.abc import Mapping
 except ImportError:
     from collections import Mapping
+try:
+    import ujson as json
+except ImportError:
+    import json
 import copy
 import warnings
 
-from . import JSONStorage, SnapshotStorage
+from . import JSONStorage
 from .utils import LRUCache, iteritems, itervalues
+from .storages import SnapshotStorage, MemoryStorage
+from .errors import FLuashError
 
 
 class Document(dict):
@@ -88,12 +94,9 @@ class StorageProxy(object):
         return Document(val, doc_id)
 
     def snapshot(self):
-        if isinstance(self._storage, SnapshotStorage):
-            raw_data = copy.deepcopy(self._storage.read()) or {}
-        else:
-            raw_data = self._storage.read() or {}
-
-        return StorageProxy(SnapshotStorage(raw_data), self._table_name)
+        data = self.read()
+        raw_data = self._storage.read() or {}
+        return StorageProxy(SnapshotStorage(raw_data, hash(json.dumps(data))), self._table_name)
 
     def read(self):
         raw_data = self._storage.read() or {}
@@ -333,9 +336,6 @@ class Table(object):
         Get the table name.
         """
         return self._name
-
-    def set_storage(self, storage):
-        self._storage = storage
 
     def bulk(self):
         return BulkTable(self._storage, self._name, self._cache_size)
@@ -696,15 +696,20 @@ class BulkTable(Table):
         """
         super(BulkTable, self).__init__(storage.snapshot(), name, cache_size)
         self._src_storage = storage
+        self._is_flush = False
 
     def flush(self):
-        data = self._read()
-        self._src_storage.write(data)
-        self.reset()
+        if self._is_flush:
+            raise FLuashError('Object is flushed')
 
-    def reset(self):
-        self.set_storage(self._src_storage.snapshot())
+        data = self._src_storage.read()
+        if self._storage._storage.memory_hash != hash(json.dumps(data)):
+            raise FLuashError('memory_hash is change')
 
+        _data = self._read()
+        _data.raw_data = data.raw_data
+        self._src_storage.write(_data)
+        self._is_flush = True
 
 # Set the default table class
 TinyDB.table_class = Table

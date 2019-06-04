@@ -2,18 +2,18 @@
 Contains the :class:`base class <tinydb.storages.Storage>` for storages and
 implementations.
 """
-
+import copy
 from abc import ABCMeta, abstractmethod
 import codecs
 import os
 
 from .utils import with_metaclass
 
-
 try:
     import ujson as json
 except ImportError:
     import json
+
 
 
 def touch(fname, create_dirs):
@@ -135,5 +135,27 @@ class MemoryStorage(Storage):
     def write(self, data):
         self.memory = data
 
+class SnapshotStorage(Storage):
+    """
+    Store the data as JSON in memory.
+    """
 
-SnapshotStorage = MemoryStorage
+    def __init__(self, memory, memory_hash):
+        """
+        Create a new instance.
+        """
+
+        super(SnapshotStorage, self).__init__()
+        if not isinstance(memory, dict):
+            raise TypeError('SnapshotStorage memory invaild')
+
+        self.memory_hash = memory_hash
+        self.memory = copy.deepcopy(memory)
+
+    def read(self):
+        return self.memory
+
+    def write(self, data):
+        self.memory = data
+
+

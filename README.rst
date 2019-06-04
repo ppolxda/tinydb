@@ -106,14 +106,15 @@ Tables Bulk Write
 
     >>> bulk = table.bulk()
     >>> bulk.insert({'value': True})
-    >>> bulk.flush()
+    >>> bulk.all()
+    [{'value': True}, {'value2': True}]
     >>> table.all()
     [{'value': True}]
 
-    >>> bulk.insert({'value2': True})
-    >>> bulk.reset()
+    >>> bulk.flush()
     >>> table.all()
-    [{'value': True}]
+    [{'value': True}, {'value2': True}]
+
 
 Using Middlewares
 =================
