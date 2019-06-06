@@ -152,7 +152,7 @@ def test_bulk(db):
     bulk.flush()
     bulk = table.bulk()
 
-    # test two bulk rollback data 
+    # test two bulk rollback data
     assert table6.count(where('int') == 5) == 1
 
     # test reset is True
@@ -189,11 +189,9 @@ def test_bulk(db):
     assert bulk.count(where('int') == 1) == 2
 
     # test bulk too old
-    try:
+    with pytest.raises(errors.FLuashError):
         bulk.flush()
-    except errors.FLuashError as ex:
-        assert str(ex) == 'memory_hash is change'
-    
+
     bulk = table.bulk()
     assert table.count(where('int') == 3) == 0
     assert bulk.count(where('int') == 3) == 0

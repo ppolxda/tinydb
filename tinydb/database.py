@@ -93,11 +93,6 @@ class StorageProxy(object):
         doc_id = int(key)
         return Document(val, doc_id)
 
-    def snapshot(self):
-        data = self.read()
-        raw_data = self._storage.read() or {}
-        return StorageProxy(SnapshotStorage(raw_data, hash(json.dumps(data))), self._table_name)
-
     def read(self):
         raw_data = self._storage.read() or {}
 
@@ -205,7 +200,8 @@ class TinyDB(object):
             return self._table_cache[name]
 
         table_class = options.pop('table_class', self._cls_table)
-        table = table_class(self._cls_storage_proxy(self._storage, name), name, **options)
+        table = table_class(self._cls_storage_proxy(
+            self._storage, name), name, **options)
 
         self._table_cache[name] = table
 
@@ -421,7 +417,6 @@ class Table(object):
         :returns: all values
         :rtype: DataProxy
         """
-
         return self._storage.read()
 
     def _write(self, values):
@@ -694,22 +689,50 @@ class BulkTable(Table):
         :param name: The table name
         :param cache_size: Maximum size of query cache.
         """
-        super(BulkTable, self).__init__(storage.snapshot(), name, cache_size)
-        self._src_storage = storage
+        super(BulkTable, self).__init__(storage, name, cache_size)
+        self._snapshot = self.snapshot()
         self._is_flush = False
+
+    def snapshot(self):
+        data = self._storage.read()
+        return SnapshotStorage(data)
+
+    def _read(self):
+        """
+        Reading access to the DB.
+
+        :returns: all values
+        :rtype: DataProxy
+        """
+        if hasattr(self, '_snapshot'):
+            return self._snapshot.read()
+        else:
+            return self._storage.read()
+
+    def _write(self, values):
+        """
+        Writing access to the DB.
+
+        :param values: the new values to write
+        :type values: DataProxy | dict
+        """
+
+        self.clear_cache()
+        self._snapshot.write(values)
 
     def flush(self):
         if self._is_flush:
             raise FLuashError('Object is flushed')
 
-        data = self._src_storage.read()
-        if self._storage._storage.memory_hash != hash(json.dumps(data)):
+        last_snapshot = self.snapshot()
+        if last_snapshot.memory_hash != self._snapshot.memory_hash:
             raise FLuashError('memory_hash is change')
 
         _data = self._read()
-        _data.raw_data = data.raw_data
-        self._src_storage.write(_data)
+        _data.raw_data = last_snapshot.read().raw_data
+        self._storage.write(_data)
         self._is_flush = True
+
 
 # Set the default table class
 TinyDB.table_class = Table

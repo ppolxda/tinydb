@@ -15,7 +15,6 @@ except ImportError:
     import json
 
 
-
 def touch(fname, create_dirs):
     if create_dirs:
         base_dir = os.path.dirname(fname)
@@ -135,12 +134,13 @@ class MemoryStorage(Storage):
     def write(self, data):
         self.memory = data
 
+
 class SnapshotStorage(Storage):
     """
     Store the data as JSON in memory.
     """
 
-    def __init__(self, memory, memory_hash):
+    def __init__(self, memory):
         """
         Create a new instance.
         """
@@ -149,7 +149,7 @@ class SnapshotStorage(Storage):
         if not isinstance(memory, dict):
             raise TypeError('SnapshotStorage memory invaild')
 
-        self.memory_hash = memory_hash
+        self.memory_hash = hash(json.dumps(memory))
         self.memory = copy.deepcopy(memory)
 
     def read(self):
@@ -157,5 +157,3 @@ class SnapshotStorage(Storage):
 
     def write(self, data):
         self.memory = data
-
-
